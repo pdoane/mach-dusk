@@ -4,11 +4,11 @@ const ca = @import("objc/ca.zig");
 const mtl = @import("objc/mtl.zig");
 const ns = @import("objc/ns.zig");
 const conv = @import("conv.zig");
+const validation = @import("../validation.zig");
 const utils = @import("../utils.zig");
 const metal = @import("../metal.zig");
 const Adapter = @import("instance.zig").Adapter;
 const Surface = @import("instance.zig").Surface;
-const validation_level = @import("../main.zig").validation_level;
 
 pub const Device = struct {
     manager: utils.Manager(Device) = .{},
@@ -152,7 +152,10 @@ pub const RenderPipeline = struct {
 
 pub const RenderPassEncoder = struct {
     manager: utils.Manager(RenderPassEncoder) = .{},
+    parent_encoder: *CommandEncoder,
     encoder: *mtl.RenderCommandEncoder,
+    valid: if (validation.enabled) bool else void = if (validation.enabled) true,
+    state: if (validation.enabled) validation.EncoderState else void = if (validation.enabled) .open,
 
     pub fn init(cmd_encoder: *CommandEncoder, descriptor: *const gpu.RenderPassDescriptor) !*RenderPassEncoder {
         const mtl_descriptor = mtl.RenderPassDescriptor.new();
@@ -179,7 +182,7 @@ pub const RenderPassEncoder = struct {
             return error.InvalidDescriptor;
         };
         var encoder = try metal.allocator.create(RenderPassEncoder);
-        encoder.* = .{ .encoder = enc };
+        encoder.* = .{ .encoder = enc, .parent_encoder = cmd_encoder };
         return encoder;
     }
 
@@ -203,8 +206,8 @@ pub const RenderPassEncoder = struct {
 pub const CommandEncoder = struct {
     manager: utils.Manager(CommandEncoder) = .{},
     cmd_buffer: *CommandBuffer,
-    // TODO - can we simplify the initialization?
-    finished: if (validation_level >= 1) bool else void = if (validation_level >= 1) false,
+    valid: if (validation.enabled) bool else void = if (validation.enabled) true,
+    state: if (validation.enabled) validation.EncoderState else void = if (validation.enabled) .open,
 
     pub fn init(device: *Device, desc: ?*const gpu.CommandEncoder.Descriptor) !*CommandEncoder {
         // TODO
@@ -221,6 +224,10 @@ pub const CommandEncoder = struct {
         metal.allocator.destroy(cmd_encoder);
     }
 
+    pub fn validate(encoder: *CommandEncoder) bool {
+        return validation.commands_mixin_validate(CommandEncoder, encoder);
+    }
+
     pub fn beginRenderPass(cmd_encoder: *CommandEncoder, desc: *const gpu.RenderPassDescriptor) !*RenderPassEncoder {
         return RenderPassEncoder.init(cmd_encoder, desc);
     }
@@ -235,6 +242,7 @@ pub const CommandEncoder = struct {
 pub const CommandBuffer = struct {
     manager: utils.Manager(CommandBuffer) = .{},
     command_buffer: *mtl.CommandBuffer,
+    valid: if (validation.enabled) bool else void = if (validation.enabled) true,
 
     pub fn init(device: *Device) !*CommandBuffer {
         const queue = try device.getQueue();

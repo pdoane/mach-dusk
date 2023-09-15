@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const gpu = @import("gpu");
 const shader = @import("shader.zig");
 const utils = @import("utils.zig");
+const validation = @import("validation.zig");
 
 const backend_type: gpu.BackendType = switch (builtin.target.os.tag) {
     .linux, .windows => .vulkan,
@@ -14,10 +15,10 @@ const impl = switch (backend_type) {
     .metal => @import("metal.zig"),
     else => unreachable,
 };
-pub const validation_level = 0;
 
 var inited = false;
 var allocator: std.mem.Allocator = undefined;
+var validation_level: u32 = 1;
 
 pub const Interface = struct {
     pub inline fn init(alloc: std.mem.Allocator, options: impl.InitOptions) !void {
@@ -214,12 +215,21 @@ pub const Interface = struct {
 
     pub inline fn commandEncoderBeginRenderPass(command_encoder_raw: *gpu.CommandEncoder, descriptor: *const gpu.RenderPassDescriptor) *gpu.RenderPassEncoder {
         const command_encoder: *impl.CommandEncoder = @ptrCast(@alignCast(command_encoder_raw));
-        if (validation_level >= 1) {
-            std.debug.assert(!command_encoder.finished);
+
+        var render_pass_valid: if (validation.enabled) bool else void = if (validation.enabled) true;
+        if (validation.enabled and validation_level >= 1) {
+            if (!command_encoder.validate()) {
+                render_pass_valid = false;
+            }
+            command_encoder.state = .locked;
         }
 
-        const render_pass = command_encoder.beginRenderPass(descriptor) catch unreachable;
-        return @ptrCast(render_pass);
+        const render_pass_encoder = command_encoder.beginRenderPass(descriptor) catch unreachable;
+        if (validation.enabled) {
+            render_pass_encoder.valid = render_pass_valid;
+        }
+
+        return @ptrCast(render_pass_encoder);
     }
 
     pub inline fn commandEncoderClearBuffer(command_encoder: *gpu.CommandEncoder, buffer: *gpu.Buffer, offset: u64, size: u64) void {
@@ -274,12 +284,22 @@ pub const Interface = struct {
 
     pub inline fn commandEncoderFinish(command_encoder_raw: *gpu.CommandEncoder, descriptor: ?*const gpu.CommandBuffer.Descriptor) *gpu.CommandBuffer {
         const command_encoder: *impl.CommandEncoder = @ptrCast(@alignCast(command_encoder_raw));
-        if (validation_level >= 1) {
-            std.debug.assert(!command_encoder.finished);
-            command_encoder.finished = true;
+
+        var command_buffer_valid: if (validation.enabled) bool else void = if (validation.enabled) true;
+        if (validation.enabled and validation_level >= 1) {
+            const validation_succeeded = command_encoder.valid and command_encoder.state == .open;
+            command_encoder.state = .ended;
+            if (!validation_succeeded) {
+                // generate validation error
+                std.debug.assert(false);
+                command_buffer_valid = false;
+            }
         }
 
         const command_buffer = command_encoder.finish(descriptor orelse &.{}) catch unreachable;
+        if (validation.enabled) {
+            command_buffer.valid = command_buffer_valid;
+        }
         return @ptrCast(command_buffer);
     }
 
@@ -1014,6 +1034,21 @@ pub const Interface = struct {
 
     pub inline fn renderPassEncoderEnd(render_pass_encoder_raw: *gpu.RenderPassEncoder) void {
         const render_pass_encoder: *impl.RenderPassEncoder = @ptrCast(@alignCast(render_pass_encoder_raw));
+        if (validation.enabled and validation_level >= 1) {
+            const parent_encoder = render_pass_encoder.parent_encoder;
+            if (!(render_pass_encoder.state == .open and parent_encoder.state == .locked)) {
+                // generate validation error
+                std.debug.assert(false);
+                return;
+            }
+            render_pass_encoder.state = .ended;
+            parent_encoder.state = .open;
+            if (!(render_pass_encoder.valid)) {
+                parent_encoder.valid = false;
+                return;
+            }
+        }
+
         render_pass_encoder.end();
     }
 
