@@ -8,6 +8,7 @@ const utils = @import("../utils.zig");
 const metal = @import("../metal.zig");
 const Adapter = @import("instance.zig").Adapter;
 const Surface = @import("instance.zig").Surface;
+const validation_level = @import("../main.zig").validation_level;
 
 pub const Device = struct {
     manager: utils.Manager(Device) = .{},
@@ -202,6 +203,8 @@ pub const RenderPassEncoder = struct {
 pub const CommandEncoder = struct {
     manager: utils.Manager(CommandEncoder) = .{},
     cmd_buffer: *CommandBuffer,
+    // TODO - can we simplify the initialization?
+    finished: if (validation_level >= 1) bool else void = if (validation_level >= 1) false,
 
     pub fn init(device: *Device, desc: ?*const gpu.CommandEncoder.Descriptor) !*CommandEncoder {
         // TODO

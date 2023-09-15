@@ -8,6 +8,7 @@ const shader = @embedFile("shader.wgsl");
 
 pub const GPUInterface = dusk.Interface;
 // pub const GPUInterface = gpu.dawn.Interface;
+// TODO - specify validation here?
 
 fn baseLoader(_: u32, name: [*:0]const u8) ?*const fn () callconv(.C) void {
     return glfw.getInstanceProcAddress(null, name);

@@ -14,6 +14,7 @@ const impl = switch (backend_type) {
     .metal => @import("metal.zig"),
     else => unreachable,
 };
+pub const validation_level = 0;
 
 var inited = false;
 var allocator: std.mem.Allocator = undefined;
@@ -213,6 +214,10 @@ pub const Interface = struct {
 
     pub inline fn commandEncoderBeginRenderPass(command_encoder_raw: *gpu.CommandEncoder, descriptor: *const gpu.RenderPassDescriptor) *gpu.RenderPassEncoder {
         const command_encoder: *impl.CommandEncoder = @ptrCast(@alignCast(command_encoder_raw));
+        if (validation_level >= 1) {
+            std.debug.assert(!command_encoder.finished);
+        }
+
         const render_pass = command_encoder.beginRenderPass(descriptor) catch unreachable;
         return @ptrCast(render_pass);
     }
@@ -269,6 +274,11 @@ pub const Interface = struct {
 
     pub inline fn commandEncoderFinish(command_encoder_raw: *gpu.CommandEncoder, descriptor: ?*const gpu.CommandBuffer.Descriptor) *gpu.CommandBuffer {
         const command_encoder: *impl.CommandEncoder = @ptrCast(@alignCast(command_encoder_raw));
+        if (validation_level >= 1) {
+            std.debug.assert(!command_encoder.finished);
+            command_encoder.finished = true;
+        }
+
         const command_buffer = command_encoder.finish(descriptor orelse &.{}) catch unreachable;
         return @ptrCast(command_buffer);
     }
