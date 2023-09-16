@@ -154,8 +154,8 @@ pub const RenderPassEncoder = struct {
     manager: utils.Manager(RenderPassEncoder) = .{},
     parent_encoder: *CommandEncoder,
     encoder: *mtl.RenderCommandEncoder,
-    valid: if (validation.enabled) bool else void = if (validation.enabled) true,
-    state: if (validation.enabled) validation.EncoderState else void = if (validation.enabled) .open,
+    valid: validation.Type(bool) = if (validation.enabled) true,
+    state: validation.Type(validation.EncoderState) = if (validation.enabled) .open,
 
     pub fn init(cmd_encoder: *CommandEncoder, descriptor: *const gpu.RenderPassDescriptor) !*RenderPassEncoder {
         const mtl_descriptor = mtl.RenderPassDescriptor.new();
@@ -206,8 +206,8 @@ pub const RenderPassEncoder = struct {
 pub const CommandEncoder = struct {
     manager: utils.Manager(CommandEncoder) = .{},
     cmd_buffer: *CommandBuffer,
-    valid: if (validation.enabled) bool else void = if (validation.enabled) true,
-    state: if (validation.enabled) validation.EncoderState else void = if (validation.enabled) .open,
+    valid: validation.Type(bool) = if (validation.enabled) true,
+    state: validation.Type(validation.EncoderState) = if (validation.enabled) .open,
 
     pub fn init(device: *Device, desc: ?*const gpu.CommandEncoder.Descriptor) !*CommandEncoder {
         // TODO
@@ -225,7 +225,7 @@ pub const CommandEncoder = struct {
     }
 
     pub fn validate(encoder: *CommandEncoder) bool {
-        return validation.commands_mixin_validate(CommandEncoder, encoder);
+        return validation.commandsMixinValidate(CommandEncoder, encoder);
     }
 
     pub fn beginRenderPass(cmd_encoder: *CommandEncoder, desc: *const gpu.RenderPassDescriptor) !*RenderPassEncoder {
@@ -242,7 +242,7 @@ pub const CommandEncoder = struct {
 pub const CommandBuffer = struct {
     manager: utils.Manager(CommandBuffer) = .{},
     command_buffer: *mtl.CommandBuffer,
-    valid: if (validation.enabled) bool else void = if (validation.enabled) true,
+    valid: validation.Type(bool) = if (validation.enabled) true,
 
     pub fn init(device: *Device) !*CommandBuffer {
         const queue = try device.getQueue();
